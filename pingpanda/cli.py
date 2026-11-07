@@ -95,11 +95,23 @@ def parse_arguments(argv=None):
     parser.add_argument("-v", "--version", action="store_true", help="Display version information")
     parser.add_argument("-update", action="store_true", help="Update the tool")
     parser.add_argument(
+    "--quiet",
+    action="store_true",
+    help="Suppress the startup banner and progress bar",
+    )
+
+    parser.add_argument(
+        "--no-colour",
+        action="store_true",
+        help="Disable coloured terminal output",
+    )
+        parser.add_argument(
         "--max-concurrent",
         type=positive_int,
         default=DEFAULT_MAX_CONCURRENT,
         help="Maximum number of URLs to check concurrently (default: 10)",
     )
+        return parser.parse_args(argv)
     parser.add_argument(
         "--format",
         choices=["text", "json", "csv", "markdown"],
@@ -138,7 +150,8 @@ async def main(argv=None):
         print("Checking for updates...")
         return
 
-    print(BANNER)
+    if not args.quiet:
+        print(BANNER)
 
     urls = load_urls(args)
     if not urls:
@@ -163,6 +176,7 @@ async def main(argv=None):
             initial_results=initial_results,
             on_result=persist_progress,
             max_concurrent=args.max_concurrent,
+            show_progress=not args.quiet,
             max_retries=args.retries,
             retry_delay=args.retry_delay,
         )
@@ -172,6 +186,7 @@ async def main(argv=None):
         print(f"Checkpoint error: {exc}", file=sys.stderr)
         return
     status_codes = classify_results(results)
+    render_report(status_codes, no_colour=args.no_colour)
     render_report(status_codes, summary_only=args.summary_only)
 
     if args.output:

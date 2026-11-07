@@ -49,6 +49,20 @@ python url-status-checker.py --help
 | `-o`, `--output` | Save the report to a file |
 | `-v`, `--version` | Show the version |
 | `-update` | Check for a newer release |
+| `--quiet` | Suppress the startup banner and progress bar |
+| `--no-colour` | Disable coloured terminal output |
+
+These options can also be combined:
+
+```bash
+# Suppress the startup banner and progress bar
+python url-status-checker.py -l urls.txt --quiet
+
+# Disable coloured terminal output
+python url-status-checker.py -l urls.txt --no-colour
+
+# Use both options together
+python url-status-checker.py -l urls.txt --quiet --no-colour
 
 ## 4. Run the tests
 
