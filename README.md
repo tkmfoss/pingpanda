@@ -31,6 +31,8 @@ PingPanda started as [Status Checker](https://github.com/BLACK-SCORP10/url-statu
 - Display the HTTP status, response time, and resolved IP address for each URL.
 - Organise results into status-class sections: 1xx, 2xx, 3xx, 4xx, 5xx, and invalid.
 - Colour-coded terminal output with a progress bar for list runs.
+- Use `--no-colour` to disable coloured terminal output.
+- Use `--quiet` to suppress the startup banner and progress bar while keeping the report visible.
 - Save the report to a text file.
 - Save completed scan results to an atomic checkpoint after each URL finishes.
 - Resume interrupted scans without rechecking completed URLs; checkpoint inputs are validated before reuse.
@@ -187,10 +189,33 @@ https://python.org
 | `--retry-delay SECONDS` | Initial delay before retrying; each later delay doubles (default: `1`) |
 | `--max-concurrent N` | Maximum number of URLs checked concurrently (default: `10`) |
 | `-v`, `--version` | Show version information |
+| `--quiet` | Suppress the startup banner and progress bar |
+| `--no-colour` | Disable coloured terminal output |
 | `-h`, `--help` | Show the help text |
 
 Provide one input source, either `-d` or `-l`, for each run.
 
+You can combine these options:
+
+Suppress the banner and progress bar:
+
+```bash
+python url-status-checker.py -l urls.txt --quiet
+```
+
+Disable terminal colours:
+
+```bash
+python url-status-checker.py -l urls.txt --no-colour
+```
+
+Use both options together:
+
+```bash
+python url-status-checker.py -l urls.txt --quiet --no-colour
+```
+
+Quiet mode still displays the final report.
 ### Structured Export Formats
 
 PingPanda supports multi-format reporting via `--format`:

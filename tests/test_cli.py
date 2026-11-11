@@ -116,6 +116,73 @@ def test_invalid_max_concurrent_is_rejected(checker, value):
         checker.parse_arguments(["--max-concurrent", value])
 
 
+def test_quiet_option_is_parsed(checker):
+    args = checker.parse_arguments(["--quiet"])
+    assert args.quiet is True
+
+
+def test_no_colour_option_is_parsed(checker):
+    args = checker.parse_arguments(["--no-colour"])
+    assert args.no_colour is True
+
+
+async def test_quiet_suppresses_banner_and_progress(
+    checker, mock_transport, fake_dns, tmp_path, capsys
+):
+    mock_transport(lambda request: httpx.Response(200))
+
+    list_file = write_urls(
+        tmp_path,
+        "https://good.test/",
+        "https://another.test/",
+    )
+
+    await checker.main(["-l", str(list_file), "--quiet"])
+
+    captured = capsys.readouterr()
+
+    assert "Created By:" not in captured.out
+    assert "===== 2XX =====" in captured.out
+    assert "https://good.test/" in captured.out
+    assert "Checking URLs" not in captured.err
+
+
+async def test_no_colour_suppresses_colour_codes(
+    checker, mock_transport, fake_dns, capsys
+):
+    mock_transport(lambda request: httpx.Response(200))
+
+    await checker.main(["-d", "https://example.com", "--no-colour"])
+
+    out = capsys.readouterr().out
+
+    assert "===== 2XX =====" in out
+    assert "\x1b[" not in out
+
+
+async def test_quiet_and_no_colour_work_together(
+    checker, mock_transport, fake_dns, tmp_path, capsys
+):
+    mock_transport(lambda request: httpx.Response(200))
+
+    list_file = write_urls(
+        tmp_path,
+        "https://good.test/",
+        "https://another.test/",
+    )
+
+    await checker.main([
+        "-l", str(list_file),
+        "--quiet",
+        "--no-colour",
+    ])
+
+    captured = capsys.readouterr()
+
+    assert "Created By:" not in captured.out
+    assert "===== 2XX =====" in captured.out
+    assert "\x1b[" not in captured.out
+    assert "Checking URLs" not in captured.err
 @pytest.mark.parametrize("option", ["--retries", "--retry-delay"])
 @pytest.mark.parametrize("value", ["-1", "abc"])
 def test_invalid_retry_options_are_rejected(checker, option, value):

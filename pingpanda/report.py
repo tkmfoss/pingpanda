@@ -322,20 +322,32 @@ def generate_text_report(
     return "\n".join(lines)
 
 
+
 # Print the report to the terminal
 def render_report(
     status_codes: dict[str, list[UrlResult]],
+    no_colour: bool = False,
     summary_only: bool = False,
 ) -> None:
     if not summary_only:
         for group, results in status_codes.items():
             if not results:
                 continue
-            print(COLORS.get(group, Fore.WHITE) + f"===== {group.upper()} =====")
+
+            heading = f"===== {group.upper()} ====="
+
+            if no_colour:
+                print(heading)
+            else:
+                print(COLORS.get(group, Fore.WHITE) + heading)
+
             for result in results:
                 print(format_result_line(result))
                 print()
-            print(Style.RESET_ALL)
+
+            if not no_colour:
+                print(Style.RESET_ALL)
+
     print("===== SUMMARY =====")
     print(summarize(status_codes))
 

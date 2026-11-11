@@ -91,3 +91,31 @@ def test_report_file_keeps_every_status_group(checker, make_result, tmp_path):
     assert "===== 4XX =====" in content
     assert "https://good.test/" in content
     assert "https://missing.test/" in content
+
+def test_render_report_without_colour(checker, make_result, capsys):
+    results = {
+        0: make_result(status=200, url="https://good.test/"),
+    }
+    groups = checker.classify_results(results)
+
+    checker.render_report(groups, no_colour=True)
+
+    out = capsys.readouterr().out
+
+    assert "===== 2XX =====" in out
+    assert "https://good.test/" in out
+    assert "\x1b[" not in out
+
+
+def test_render_report_with_default_colours(checker, make_result, capsys):
+    results = {
+        0: make_result(status=200, url="https://good.test/"),
+    }
+    groups = checker.classify_results(results)
+
+    checker.render_report(groups)
+
+    out = capsys.readouterr().out
+
+    assert "===== 2XX =====" in out
+    assert "https://good.test/" in out
