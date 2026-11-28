@@ -37,6 +37,7 @@ from pingpanda.network import (
     DEFAULT_RETRIES,
     DEFAULT_RETRY_DELAY_SECONDS,
 )
+from pingpanda.rate_limit import DEFAULT_PER_HOST_CONCURRENT
 from pingpanda.report import classify_results, render_report, save_report
 
 DEFAULT_CHECKPOINT = ".pingpanda-checkpoint.json"
@@ -148,6 +149,13 @@ def parse_arguments(argv=None):
         type=positive_int,
         default=DEFAULT_MAX_CONCURRENT,
         help="Maximum number of URLs to check concurrently (default: 10)",
+    )
+    parser.add_argument(
+        "--per-host-concurrent",
+        type=positive_int,
+        default=DEFAULT_PER_HOST_CONCURRENT,
+        metavar="N",
+        help="Maximum concurrent requests to one host (default: 2)",
     )
     parser.add_argument(
         "--dns-cache-ttl",
@@ -419,6 +427,7 @@ async def main(argv=None):
                 urls,
                 watch_config,
                 max_concurrent=args.max_concurrent,
+                per_host_concurrent=args.per_host_concurrent,
                 show_progress=not args.quiet,
                 max_retries=args.retries,
                 retry_delay=args.retry_delay,
@@ -443,6 +452,7 @@ async def main(argv=None):
                 initial_results=initial_results,
                 on_result=persist_progress,
                 max_concurrent=args.max_concurrent,
+                per_host_concurrent=args.per_host_concurrent,
                 show_progress=not args.quiet,
                 max_retries=args.retries,
                 retry_delay=args.retry_delay,

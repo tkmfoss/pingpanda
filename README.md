@@ -27,6 +27,7 @@ PingPanda started as [Status Checker](https://github.com/BLACK-SCORP10/url-statu
 
 - Check a single URL or a list of URLs from a text file.
 - Use asynchronous HTTP requests for list checks.
+- Limit concurrency independently per host and respect server `Retry-After` throttling.
 - Follow redirects and show the final destination.
 - Display the HTTP status, response time, and resolved IP address for each URL.
 - Organise results into status-class sections: 1xx, 2xx, 3xx, 4xx, 5xx, and invalid.
@@ -144,6 +145,18 @@ approximately 1, 2, and 4 seconds. Connection failures, timeouts, and
 transient HTTP responses (`408`, `429`, `502`, `503`, and `504`) are retried;
 permanent responses such as `404` are not.
 
+Limit simultaneous requests to each host:
+
+```bash
+python url-status-checker.py -l urls.txt --max-concurrent 10 --per-host-concurrent 2
+```
+
+The global worker limit and per-host limit work together. A slow or throttled
+host does not consume the concurrency allowance of unrelated hosts. When a
+`429` or `503` response includes a valid `Retry-After` header, PingPanda delays
+new requests only for that host. Both delay-seconds and HTTP-date forms are
+supported.
+
 Save the report to a file:
 
 ```bash
@@ -217,6 +230,7 @@ https://python.org
 | `--retries N` | Retry transient failures up to `N` times after the initial request (default: `0`) |
 | `--retry-delay SECONDS` | Initial delay before retrying; each later delay doubles (default: `1`) |
 | `--max-concurrent N` | Maximum number of URLs checked concurrently (default: `10`) |
+| `--per-host-concurrent N` | Maximum concurrent requests to one host (default: `2`) |
 | `--dns-cache-ttl SECONDS` | Cache successful DNS resolutions for this many seconds (default: `60`) |
 | `--dns-negative-ttl SECONDS` | Cache failed DNS resolutions for this many seconds (default: `5`) |
 | `--dns-cache-size N` | Maximum DNS cache entries kept during one scan (default: `256`) |
@@ -260,6 +274,21 @@ python url-status-checker.py -l urls.txt --watch 10
 # Run 5 bounded cycles, print only changes, and export JSON summary
 python url-status-checker.py -l urls.txt --watch 5 --watch-cycles 5 --watch-changes-only --format json -o watch-summary.json
 ```
+
+### Per-host Rate Limiting
+
+PingPanda applies a separate concurrency limit to each normalized host and port.
+By default, at most two requests to the same host run at once, while requests to
+other hosts continue independently.
+
+```bash
+python url-status-checker.py -l urls.txt --per-host-concurrent 2
+```
+
+For `429 Too Many Requests` and `503 Service Unavailable` responses, a valid
+`Retry-After` header creates a cooldown for only the affected host. Numeric
+delays and standard HTTP-date values are supported. Invalid, negative, or
+expired values are ignored safely, and normal retry backoff remains available.
 
 ### Shared DNS Cache
 

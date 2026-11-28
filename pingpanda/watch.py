@@ -22,6 +22,7 @@ from pingpanda.network import (
     DEFAULT_RETRY_DELAY_SECONDS,
     check_all,
 )
+from pingpanda.rate_limit import DEFAULT_PER_HOST_CONCURRENT
 from pingpanda.report import compute_latency_percentiles
 
 
@@ -463,6 +464,7 @@ async def run_watch(
     watch_config: WatchConfig,
     *,
     max_concurrent: int = DEFAULT_MAX_CONCURRENT,
+    per_host_concurrent: int = DEFAULT_PER_HOST_CONCURRENT,
     show_progress: bool = True,
     max_retries: int = DEFAULT_RETRIES,
     retry_delay: float = DEFAULT_RETRY_DELAY_SECONDS,
@@ -508,6 +510,7 @@ async def run_watch(
                 initial_results={},
                 on_result=None,
                 max_concurrent=max_concurrent,
+                per_host_concurrent=per_host_concurrent,
                 show_progress=show_progress,
                 max_retries=max_retries,
                 retry_delay=retry_delay,

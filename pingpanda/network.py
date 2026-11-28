@@ -20,6 +20,13 @@ from pingpanda.dns_cache import (
     DnsCache,
 )
 from pingpanda.models import UrlResult
+from pingpanda.rate_limit import (
+    DEFAULT_PER_HOST_CONCURRENT,
+    RETRY_AFTER_STATUS_CODES,
+    HostRateLimiter,
+    RateLimitCancelled,
+    parse_retry_after,
+)
 from pingpanda.ssl_check import SslConfig, inspect_ssl_certificate
 
 DEFAULT_TIMEOUT_SECONDS = 10.0
@@ -114,6 +121,8 @@ async def check_url_status(
     assertion_config: AssertionConfig | None = None,
     ssl_config: SslConfig | None = None,
     dns_cache: DnsCache | None = None,
+    host_limiter: HostRateLimiter | None = None,
+    cancellation_token: CancellationToken | None = None,
 ):
     _validate_retry_options(max_retries, retry_delay)
     url = normalize_url(url)
@@ -128,22 +137,53 @@ async def check_url_status(
 
     while True:
         attempts += 1
+        retry_after_delay = None
         try:
-            response = await asyncio.wait_for(
-                session.get(
+            if host_limiter is None:
+                response = await asyncio.wait_for(
+                    session.get(
+                        url,
+                        headers=req_headers,
+                        follow_redirects=True,
+                        timeout=httpx.Timeout(DEFAULT_TIMEOUT_SECONDS, read=None),
+                    ),
+                    timeout=DEFAULT_TIMEOUT_SECONDS,
+                )
+            else:
+                async with host_limiter.limit(
                     url,
-                    headers=req_headers,
-                    follow_redirects=True,
-                    timeout=httpx.Timeout(DEFAULT_TIMEOUT_SECONDS, read=None),
-                ),
-                timeout=DEFAULT_TIMEOUT_SECONDS,
-            )
+                    cancellation_token=cancellation_token,
+                ):
+                    response = await asyncio.wait_for(
+                        session.get(
+                            url,
+                            headers=req_headers,
+                            follow_redirects=True,
+                            timeout=httpx.Timeout(DEFAULT_TIMEOUT_SECONDS, read=None),
+                        ),
+                        timeout=DEFAULT_TIMEOUT_SECONDS,
+                    )
+
+                    if response.status_code in RETRY_AFTER_STATUS_CODES:
+                        retry_after_delay = parse_retry_after(
+                            response.headers.get("Retry-After")
+                        )
+                        if retry_after_delay is not None:
+                            host_limiter.defer(url, retry_after_delay)
+
         except (httpx.RequestError, asyncio.TimeoutError) as exc:
             if attempts <= max_retries and (
                 not isinstance(exc, httpx.RequestError)
                 or _is_retryable_exception(exc)
             ):
-                await asyncio.sleep(retry_delay * 2 ** (attempts - 1))
+                delay = retry_delay * 2 ** (attempts - 1)
+                if host_limiter is not None:
+                    await host_limiter.sleep_cancellable(
+                        delay,
+                        cancellation_token=cancellation_token,
+                    )
+                else:
+                    await asyncio.sleep(delay)
                 continue
 
             elapsed = time.perf_counter() - started
@@ -177,7 +217,16 @@ async def check_url_status(
 
         if response.status_code in RETRYABLE_STATUS_CODES and attempts <= max_retries:
             await response.aclose()
-            await asyncio.sleep(retry_delay * 2 ** (attempts - 1))
+            backoff_delay = retry_delay * 2 ** (attempts - 1)
+            delay = max(backoff_delay, retry_after_delay or 0.0)
+
+            if host_limiter is not None:
+                await host_limiter.sleep_cancellable(
+                    delay,
+                    cancellation_token=cancellation_token,
+                )
+            else:
+                await asyncio.sleep(delay)
             continue
 
         elapsed = time.perf_counter() - started
@@ -239,6 +288,7 @@ async def check_all(
     dns_cache_ttl: float = DEFAULT_DNS_CACHE_TTL,
     dns_negative_ttl: float = DEFAULT_DNS_NEGATIVE_TTL,
     dns_cache_size: int = DEFAULT_DNS_CACHE_SIZE,
+    per_host_concurrent: int = DEFAULT_PER_HOST_CONCURRENT,
 ):
     """Check unfinished URLs with bounded concurrency.
 
@@ -261,6 +311,7 @@ async def check_all(
         max_entries=dns_cache_size,
         timeout=DEFAULT_TIMEOUT_SECONDS,
     )
+    host_limiter = HostRateLimiter(max_per_host=per_host_concurrent)
 
     urls = list(urls)
     results = dict(initial_results or {})
@@ -314,7 +365,8 @@ async def check_all(
                         return
 
                     url_id, url = item
-                    result = await check_url_status(
+                    try:
+                        result = await check_url_status(
                         session,
                         url_id,
                         url,
@@ -323,7 +375,17 @@ async def check_all(
                         assertion_config=assertion_config,
                         ssl_config=ssl_config,
                         dns_cache=dns_cache,
+                        host_limiter=host_limiter,
+                        cancellation_token=cancellation_token,
                     )
+                    except RateLimitCancelled:
+                        if (
+                            cancellation_token is not None
+                            and cancellation_token.cancelled
+                        ):
+                            return
+                        raise
+
                     results[result.url_id] = result
 
                     if on_result is not None:
